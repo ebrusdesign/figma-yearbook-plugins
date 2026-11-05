@@ -1,0 +1,11 @@
+{
+  "name": "figma-yearbook-plugins",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Figma plugins for laying out a printed yearbook: photo layout, headers/footers, image adjustments.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node photo-fill/build.js",
+    "test": "node headers-footers/test/mock-figma.test.js && node reset-exposure/test/mock-figma.test.js && node photo-fill/test/layout.test.js"
+  }
+}

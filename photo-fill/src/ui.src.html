@@ -1,0 +1,656 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 14px 14px 20px; font: 12px/1.45 Inter, system-ui, -apple-system, sans-serif;
+    background: var(--figma-color-bg, #fff); color: var(--figma-color-text, #222);
+  }
+  h1 { font-size: 13px; margin: 0 0 2px; font-weight: 600; }
+  .sub { color: var(--figma-color-text-secondary, #777); margin: 0 0 12px; }
+  section { border-top: 1px solid var(--figma-color-border, #e5e5e5); padding: 12px 0; }
+  section:first-of-type { border-top: 0; padding-top: 4px; }
+  .label { font-weight: 600; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: baseline; }
+  .muted { color: var(--figma-color-text-secondary, #777); font-weight: 400; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; border-radius: 6px; padding: 6px 10px; cursor: pointer;
+    border: 1px solid var(--figma-color-border-strong, #ccc); background: var(--figma-color-bg, #fff); color: inherit;
+  }
+  button:hover:not(:disabled) { background: var(--figma-color-bg-hover, #f3f3f3); }
+  button.primary { background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); border-color: transparent; font-weight: 600; width: 100%; padding: 9px; }
+  button.primary:hover:not(:disabled) { background: var(--figma-color-bg-brand-hover, #0a85e0); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.link { border: 0; padding: 0; background: none; color: var(--figma-color-text-brand, #0d99ff); text-decoration: underline; }
+  input[type=number] { width: 58px; font: inherit; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--figma-color-border-strong, #ccc); background: transparent; color: inherit; }
+  .grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; }
+  .frames { max-height: 92px; overflow: auto; margin-top: 4px; }
+  .frames div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .warn { color: var(--figma-color-text-warning, #b86200); }
+  .err { color: var(--figma-color-text-danger, #e03e1a); }
+  .ok { color: var(--figma-color-text-success, #14ae5c); }
+  .plan { margin: 8px 0; }
+  .status { min-height: 18px; margin-top: 8px; }
+  .bar { height: 4px; background: var(--figma-color-bg-secondary, #eee); border-radius: 2px; overflow: hidden; margin-top: 6px; display: none; }
+  .bar > div { height: 100%; width: 0; background: var(--figma-color-bg-brand, #0d99ff); transition: width .15s; }
+  .report { margin-top: 8px; }
+  .report h3 { font-size: 12px; margin: 10px 0 4px; }
+  .report ul { margin: 0; padding-left: 16px; }
+  .report li { margin: 1px 0; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .check { display: flex; gap: 6px; align-items: flex-start; margin-top: 6px; }
+  .hidden { display: none; }
+  .grp { border: 1px solid var(--figma-color-border, #e5e5e5); border-radius: 6px; padding: 6px; margin: 6px 0; }
+  .grp .thumbs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+  .grp img { height: 56px; border-radius: 3px; display: block; }
+  .tag { font-size: 10px; padding: 1px 5px; border-radius: 8px; background: var(--figma-color-bg-secondary, #eee); margin-left: 4px; }
+  details.sub summary { font-weight: 600; font-size: 12px; margin: 10px 0 4px; }
+</style>
+</head>
+<body>
+  <h1>Yearbook Photo Fill</h1>
+  <p class="sub">Fills empty photo frames with justified, uncropped photos.</p>
+
+  <section>
+    <div class="label">1. Frames <span class="muted" id="frameCount">none selected</span></div>
+    <div class="muted" id="frameHint">Select the empty PHOTO PAGE frames (or whole book pages) in Figma, in any order — they're filled left-to-right, top-to-bottom.</div>
+    <div class="frames" id="frameList"></div>
+  </section>
+
+  <section>
+    <div class="label">2. Photos <span class="muted" id="photoCount">none yet</span></div>
+    <div class="row">
+      <button id="addFolder">Choose section folder…</button>
+      <button id="addFiles">Add photos…</button>
+      <button id="clearPhotos" class="link">Clear</button>
+    </div>
+    <div id="photoSource" style="margin-top:6px"></div>
+    <div class="muted" style="margin-top:4px">Choosing a folder replaces what's loaded and uses only its READY photos (BACKUPS and NEEDS REVIEW are ignored).</div>
+    <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif" class="hidden">
+    <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+    <div class="bar" id="prepBar"><div></div></div>
+  </section>
+
+  <section>
+    <details id="settingsBox">
+      <summary>Settings</summary>
+      <div class="grid" style="margin-top:8px">
+        <span>Gap between photos (px)</span><input type="number" id="gap" min="0" max="80" step="1">
+        <span>Max photos per page</span><input type="number" id="maxPer" min="4" max="16" step="1">
+        <span>Max trim per photo (%)</span><input type="number" id="maxTrim" min="0" max="6" step="0.5">
+        <span>Printed page width (in)</span><input type="number" id="pageWidthIn" min="4" max="20" step="0.5">
+        <span>Low-res warning below (dpi)</span><input type="number" id="minDpi" min="100" max="300" step="10">
+      </div>
+      <label class="check"><input type="checkbox" id="clear" checked> <span>Clear anything already inside the frames (⌘Z undoes)</span></label>
+      <label class="check"><input type="checkbox" id="fitSel"> <span>Only fill the selected pages — if there are more photos than fit, pick the best-fitting ones (up to the max per page) and leave the rest out</span></label>
+    </details>
+  </section>
+
+  <section>
+    <div class="plan" id="plan"></div>
+    <button class="primary" id="fill" disabled>Fill pages</button>
+    <div class="status" id="status"></div>
+    <div class="bar" id="runBar"><div></div></div>
+  </section>
+
+  <section>
+    <div class="label">Re-flow <span class="muted">after swapping, adding or deleting photos</span></div>
+    <div class="muted" style="margin-bottom:6px">Select filled frames (or a photo inside one). Drag layers to set the order.</div>
+    <div class="row">
+      <button id="reflowOrder">Keep my order</button>
+      <button id="reflowBest">Best fit (reorders)</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="label">Proof check <span class="muted">duplicates &amp; print issues</span></div>
+    <div class="muted" style="margin-bottom:6px">Scans every photo in the file — including ones placed by hand — for repeats, look-alikes, low resolution, heavy crops and empty photo frames. Nothing is changed.</div>
+    <div class="row">
+      <button id="auditAll">Check whole file</button>
+      <button id="auditSel">Check selected pages only</button>
+    </div>
+    <div class="status" id="auditStatus"></div>
+    <div class="bar" id="auditBar"><div></div></div>
+  </section>
+
+  <div class="report" id="report"></div>
+
+<script>
+/*__LAYOUT__*/
+</script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var IMG_EXT = /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif|tiff?)$/i;
+  var HEIC_EXT = /\.(heic|heif)$/i;
+  var CAP = 3000;               // longest edge placed in Figma (px) — plenty for an 11×8.5in page
+  var HARD_MAX = 16;
+  var S = { gap: 10, maxPer: 13, maxTrim: 3, pageWidthIn: 11, minDpi: 200, clear: true, fitSel: false };
+  var frames = [], photos = [], busy = false, pending = {}, invalidSel = 0, mixOk = false;
+
+  function post(m) { parent.postMessage({ pluginMessage: m }, '*'); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function tick() { return new Promise(function (r) { setTimeout(r, 0); }); }
+  function setStatus(html, cls) { $('status').className = 'status ' + (cls || ''); $('status').innerHTML = html; }
+  function bar(id, frac) { var b = $(id); b.style.display = frac == null ? 'none' : 'block'; b.firstElementChild.style.width = Math.round((frac || 0) * 100) + '%'; }
+  function opts() { return { gap: S.gap, maxTrim: S.maxTrim / 100 }; }
+
+  // ---------- settings ----------
+  ['gap', 'maxPer', 'maxTrim', 'pageWidthIn', 'minDpi'].forEach(function (k) {
+    $(k).addEventListener('change', function () {
+      var v = parseFloat($(k).value); if (!isNaN(v)) S[k] = v; else $(k).value = S[k];
+      saveSettings(); refresh();
+    });
+  });
+  $('clear').addEventListener('change', function () { S.clear = $('clear').checked; saveSettings(); refresh(); });
+  $('fitSel').addEventListener('change', function () { S.fitSel = $('fitSel').checked; saveSettings(); refresh(); });
+  function showSettings() { ['gap', 'maxPer', 'maxTrim', 'pageWidthIn', 'minDpi'].forEach(function (k) { $(k).value = S[k]; }); $('clear').checked = S.clear; $('fitSel').checked = !!S.fitSel; }
+  function saveSettings() { post({ type: 'saveSettings', settings: S }); }
+
+  // ---------- photos ----------
+  $('addFiles').onclick = function () { $('fileInput').value = ''; $('fileInput').click(); };
+  $('addFolder').onclick = function () { $('folderInput').value = ''; $('folderInput').click(); };
+  $('clearPhotos').onclick = function () { if (!busy) { photos = []; mixOk = false; refresh(); $('report').innerHTML = ''; setStatus(''); } };
+  $('fileInput').onchange = function (e) { addFiles(Array.prototype.slice.call(e.target.files), false); };
+  $('folderInput').onchange = function (e) { addFiles(Array.prototype.slice.call(e.target.files), true); };
+
+  async function addFiles(list, fromFolder) {
+    if (busy || !list.length) return;
+    var rel = function (f) { return f.webkitRelativePath || f.name; };
+    list = list.filter(function (f) { return f.name.charAt(0) !== '.'; });
+    var replacedMsg = '', source = fromFolder ? (rel(list[0] || { name: 'folder' }).split('/')[0] || 'folder') : 'individually added photos';
+    if (fromFolder) {
+      // Safeguard: picking a section folder starts fresh instead of adding to whatever was loaded before
+      replacedMsg = photos.length ? 'Replaced the previously loaded photos with <b>' + esc(source) + '</b>.' : '';
+      photos = []; mixOk = false; $('report').innerHTML = '';
+      var ready = list.filter(function (f) { return /(^|\/)READY\//.test(rel(f)); });
+      if (ready.length) list = ready;
+    }
+    var skippedType = list.filter(function (f) { return !IMG_EXT.test(f.name) && !/^image\//.test(f.type); });
+    list = list.filter(function (f) { return IMG_EXT.test(f.name) || /^image\//.test(f.type); });
+    var known = {}; photos.forEach(function (p) { known[p.key] = 1; });
+    var fresh = [];
+    list.forEach(function (f) { var key = rel(f) + '|' + f.size; if (!known[key]) { known[key] = 1; fresh.push({ key: key, name: f.name, file: f, status: 'wait', source: source }); } });
+    skippedType.forEach(function (f) { if (!/\.(html|ds_store|txt|json|pdf|mov|mp4)$/i.test(f.name)) photos.push({ key: rel(f), name: f.name, status: 'skip', reason: 'not an image' }); });
+    photos = photos.concat(fresh);
+    busy = true; refresh();
+    for (var i = 0; i < fresh.length; i++) {
+      setStatus('Preparing photos… ' + (i + 1) + ' / ' + fresh.length);
+      bar('prepBar', (i + 1) / fresh.length);
+      await prepare(fresh[i]);
+      if (i % 4 === 3) await tick();
+    }
+    // Safeguard: the same photo loaded twice (identical file content) is only used once
+    var seen = {};
+    photos.forEach(function (p) {
+      if (p.status !== 'ok') return;
+      if (seen[p.src]) { p.status = 'skip'; p.reason = 'same photo as ' + seen[p.src] + ' (already loaded)'; }
+      else seen[p.src] = p.name;
+    });
+    bar('prepBar', null); busy = false; setStatus(fromFolder && replacedMsg ? replacedMsg : ''); refresh();
+  }
+
+  // fast 64-bit content fingerprint (two independent 32-bit FNV-style hashes)
+  function fingerprint(buf) {
+    var a = new Uint8Array(buf), h1 = 0x811c9dc5, h2 = 0x01000193 ^ a.length;
+    for (var i = 0; i < a.length; i++) { h1 = Math.imul(h1 ^ a[i], 16777619); h2 = Math.imul(h2 + a[i], 2654435761) ^ (h2 >>> 13); }
+    return (h1 >>> 0).toString(16) + '-' + (h2 >>> 0).toString(16) + '-' + a.length;
+  }
+
+  // decode (EXIF rotation applied by the browser), flatten onto white, cap size, re-encode as JPEG
+  var prepCanvas = null;
+  async function prepare(p) {
+    try {
+      p.src = fingerprint(await p.file.arrayBuffer());
+      var src = await decode(p.file, p.name);
+      var w = src.width, h = src.height, sc = Math.min(1, CAP / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w * sc)), ch = Math.max(1, Math.round(h * sc));
+      var cv = prepCanvas || (prepCanvas = document.createElement('canvas')); cv.width = cw; cv.height = ch;
+      var ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cw, ch);
+      ctx.imageSmoothingQuality = 'high'; ctx.drawImage(src, 0, 0, cw, ch);
+      if (src.close) src.close();
+      var blob = await new Promise(function (r) { cv.toBlob(r, 'image/jpeg', 0.9); });
+      cv.width = cv.height = 1;
+      p.bytes = new Uint8Array(await blob.arrayBuffer());
+      p.w = cw; p.h = ch; p.origW = w; p.origH = h; p.status = 'ok';
+      delete p.file;
+    } catch (e) {
+      p.status = 'skip'; p.reason = HEIC_EXT.test(p.name) ? "HEIC couldn't be converted" : "couldn't be read";
+      delete p.file;
+    }
+  }
+
+  async function decode(file, name) {
+    if (!HEIC_EXT.test(name)) {
+      try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { /* fall through */ }
+      try { return await viaImg(file); } catch (e) { /* maybe a mislabelled HEIC */ }
+    }
+    var jpg = await heicToJpeg(file);
+    return await createImageBitmap(jpg, { imageOrientation: 'from-image' });
+  }
+  function viaImg(blob) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(blob), im = new Image();
+      im.onload = function () { URL.revokeObjectURL(url); res(im); };
+      im.onerror = function () { URL.revokeObjectURL(url); rej(new Error('decode')); };
+      im.src = url;
+    });
+  }
+  var heicLib = null;
+  function loadHeic() {
+    if (heicLib) return heicLib;
+    heicLib = new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+      s.onload = function () { window.heic2any ? res(window.heic2any) : rej(new Error('no lib')); };
+      s.onerror = function () { heicLib = null; rej(new Error('HEIC converter unavailable (offline?)')); };
+      document.head.appendChild(s);
+    });
+    return heicLib;
+  }
+  async function heicToJpeg(file) {
+    var conv = await loadHeic();
+    var out = await conv({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+    return Array.isArray(out) ? out[0] : out;
+  }
+
+  // ---------- planning ----------
+  function okPhotos() { return photos.filter(function (p) { return p.status === 'ok'; }); }
+  function currentPlan() { return RL.planCounts(okPhotos().length, frames.length, S.maxPer, HARD_MAX, S.fitSel); }
+
+  function refresh() {
+    var ok = okPhotos(), skipped = photos.filter(function (p) { return p.status === 'skip'; }), waiting = photos.filter(function (p) { return p.status === 'wait'; });
+    $('photoCount').textContent = photos.length ? (ok.length + ' ready' + (waiting.length ? ', ' + waiting.length + ' preparing' : '') + (skipped.length ? ', ' + skipped.length + ' skipped' : '')) : 'none yet';
+    var srcCount = {}; ok.forEach(function (p) { srcCount[p.source] = (srcCount[p.source] || 0) + 1; });
+    var srcNames = Object.keys(srcCount);
+    $('photoSource').innerHTML = srcNames.length === 1 ? 'From <b>' + esc(srcNames[0]) + '</b>' : '';
+    $('frameCount').textContent = frames.length ? frames.length + ' selected' : 'none selected';
+    $('frameList').innerHTML = frames.map(function (f, i) {
+      var note = f.images ? ' · <span class="muted">' + f.images + ' photos</span>' : '';
+      if (f.texts) note += ' · <span class="warn">contains text</span>';
+      return '<div>' + (i + 1) + '. ' + esc(f.label) + ' <span class="muted">' + Math.round(f.w) + '×' + Math.round(f.h) + '</span>' + note + '</div>';
+    }).join('') + (invalidSel ? '<div class="warn">' + invalidSel + ' selected layer(s) aren\'t frames and will be ignored.</div>' : '');
+    var plan = currentPlan(), html = '', can = !busy && !waiting.length;
+    if (!ok.length && !frames.length) html = '<span class="muted">Choose photos and select frames to see the plan.</span>';
+    else if (plan.error) {
+      html = '<span class="err">' + esc(plan.error) + '</span>'; can = false;
+      if (plan.tooMany) html += '<br><button class="link" id="turnOnFit">Fit the best ' + frames.length * S.maxPer + ' into the ' + frames.length + ' selected page' + (frames.length > 1 ? 's' : '') + ' instead</button>';
+    }
+    else {
+      html = '';
+      if (srcNames.length > 1) {
+        html += '<div class="err" style="margin-bottom:6px">Photos from ' + srcNames.length + ' places are loaded: ' +
+          srcNames.map(function (n) { return esc(n) + ' (' + srcCount[n] + ')'; }).join(', ') +
+          '. Click Clear and choose one section folder, or confirm below.</div>' +
+          '<label class="check" style="margin:0 0 8px"><input type="checkbox" id="mixOk"' + (mixOk ? ' checked' : '') + '> <span>I\'m mixing these on purpose</span></label>';
+        if (!mixOk) can = false;
+      }
+      html += '<b>' + (plan.leftOut ? (ok.length - plan.leftOut) + ' of ' + ok.length : ok.length) + ' photos → ' + plan.pages + ' page' + (plan.pages > 1 ? 's' : '') + '</b> <span class="muted">(' + plan.counts.join(' · ') + ')</span>';
+      if (plan.leftOut) html += '<br><span class="muted">Picks the best-fitting photos; ' + plan.leftOut + ' will be left out and listed after.</span>';
+      if (plan.unused) html += '<br><span class="muted">' + plan.unused + ' selected frame' + (plan.unused > 1 ? 's' : '') + ' will stay empty.</span>';
+      if (plan.counts[0] > S.maxPer) html += '<br><span class="warn">More than ' + S.maxPer + ' per page — select more frames for bigger photos.</span>';
+      var used = frames.slice(0, plan.pages);
+      var withText = used.filter(function (f) { return f.texts; });
+      if (withText.length) { html += '<br><span class="err">"' + esc(withText[0].label) + '" contains text, so it looks like a whole book page. Select the empty photo frame inside it (or name that frame PHOTO PAGE).</span>'; can = false; }
+      var full = used.filter(function (f) { return f.children; });
+      if (full.length && !S.clear) { html += '<br><span class="err">' + full.length + ' frame(s) aren\'t empty. Empty them or tick "Clear anything already inside" in Settings.</span>'; can = false; }
+      else if (full.length) html += '<br><span class="muted">' + full.length + ' frame(s) already have layers — they\'ll be replaced.</span>';
+    }
+    $('plan').innerHTML = html;
+    if ($('mixOk')) $('mixOk').onchange = function () { mixOk = $('mixOk').checked; refresh(); };
+    if ($('turnOnFit')) $('turnOnFit').onclick = function () { S.fitSel = true; showSettings(); saveSettings(); refresh(); };
+    $('fill').disabled = !(can && !plan.error && ok.length && frames.length);
+    $('fill').textContent = plan.pages && !plan.error ? 'Fill ' + plan.pages + ' page' + (plan.pages > 1 ? 's' : '') : 'Fill pages';
+    $('auditAll').disabled = $('auditSel').disabled = busy;
+    $('reflowOrder').disabled = $('reflowBest').disabled = busy || !frames.some(function (f) { return f.images; });
+  }
+
+  // ---------- fill ----------
+  function ask(html, buttons) {
+    return new Promise(function (res) {
+      $('status').className = 'status';
+      $('status').innerHTML = html + '<div class="row" style="margin-top:8px">' + buttons.map(function (b) {
+        return '<button data-choice="' + b[0] + '"' + (b[2] ? ' class="primary" style="width:auto;padding:6px 10px"' : '') + '>' + b[1] + '</button>';
+      }).join('') + '</div>';
+      Array.prototype.forEach.call($('status').querySelectorAll('button[data-choice]'), function (btn) {
+        btn.onclick = function () { res(btn.getAttribute('data-choice')); };
+      });
+    });
+  }
+  function waitFor(key) { return new Promise(function (res, rej) { pending[key] = { res: res, rej: rej }; }); }
+
+  $('fill').onclick = async function () {
+    var plan = currentPlan(); if (plan.error || busy) return;
+    busy = true; refresh(); $('report').innerHTML = '';
+    var ok = okPhotos(), used = frames.slice(0, plan.pages);
+    try {
+      // Safeguard: photos already placed elsewhere in this Figma file
+      setStatus('Checking these photos aren\'t already on other pages…'); bar('runBar', 0.01);
+      var chk = waitFor('placedCheck');
+      post({ type: 'checkPlaced', items: ok.map(function (p, i) { return { i: i, bytes: p.bytes, src: p.src }; }), exclude: S.clear ? frames.map(function (f) { return f.id; }) : [] });
+      var found = (await chk).found, dupIdx = Object.keys(found).map(Number);
+      if (dupIdx.length) {
+        var byWhere = {}; dupIdx.forEach(function (i) { var w = found[i].where; byWhere[w] = (byWhere[w] || 0) + 1; });
+        var choice = await ask('<span class="warn"><b>' + dupIdx.length + ' of these photos are already placed</b> on other pages: ' +
+          Object.keys(byWhere).map(function (w) { return esc(w) + ' (' + byWhere[w] + ')'; }).join(', ') + '.</span>',
+          [['skip', 'Leave them out', true], ['all', 'Place anyway'], ['cancel', 'Cancel']]);
+        if (choice === 'cancel') { bar('runBar', null); setStatus('Cancelled — nothing was placed.'); busy = false; refresh(); return; }
+        if (choice === 'skip') {
+          var dset = {}; dupIdx.forEach(function (i) { dset[i] = 1; });
+          ok = ok.filter(function (_, i) { return !dset[i]; });
+          plan = RL.planCounts(ok.length, frames.length, S.maxPer, HARD_MAX, S.fitSel);
+          if (plan.error) { bar('runBar', null); setStatus('<span class="err">' + esc(plan.error) + '</span>'); busy = false; refresh(); return; }
+          used = frames.slice(0, plan.pages);
+        }
+      }
+      setStatus('Working out the best layouts…'); bar('runBar', 0.02); await tick(); await tick();
+      var pages = RL.layoutBook(ok.map(function (p) { return p.w / p.h; }), used.map(function (f) { return { w: f.w, h: f.h }; }), plan.counts, opts());
+      var results = [];
+      for (var k = 0; k < pages.length; k++) {
+        setStatus('Placing page ' + (k + 1) + ' of ' + pages.length + '…'); bar('runBar', (k + 0.5) / pages.length);
+        var f = used[k], items = pages[k].rects.map(function (r) {
+          var p = ok[r.i];
+          return { name: p.name.replace(/\.[^.]+$/, ''), bytes: p.bytes, x: r.x, y: r.y, w: r.w, h: r.h, srcW: p.w, srcH: p.h, src: p.src, from: p.source };
+        });
+        var wait = waitFor('placed:' + f.id);
+        post({ type: 'place', frameId: f.id, items: items, clear: S.clear });
+        var res = await wait;
+        results.push({ frame: f, page: pages[k], ids: res.ids, photos: pages[k].rects.map(function (r) { return ok[r.i]; }) });
+      }
+      bar('runBar', null);
+      var placed = ok.length - pages.leftOut.length;
+      setStatus('<span class="ok">Done — ' + placed + ' photos on ' + pages.length + ' page' + (pages.length > 1 ? 's' : '') + '.</span>' +
+        (pages.leftOut.length ? ' <span class="muted">' + pages.leftOut.length + ' left out (listed below).</span>' : ''));
+      post({ type: 'notify', text: 'Placed ' + placed + ' photos on ' + pages.length + ' pages' });
+      report(results, photos.filter(function (p) { return p.status === 'skip'; }), pages.leftOut.map(function (i) { return ok[i]; }));
+    } catch (e) {
+      bar('runBar', null); setStatus('<span class="err">Something went wrong: ' + esc(e.message || e) + '</span>');
+    }
+    busy = false; refresh();
+  };
+
+  // ---------- report ----------
+  var idMap = {};
+  function link(id, text) { var k = 'l' + Object.keys(idMap).length; idMap[k] = id; return '<button class="link" data-k="' + k + '">' + esc(text) + '</button>'; }
+  $('report').addEventListener('click', function (e) {
+    var k = e.target.getAttribute && e.target.getAttribute('data-k');
+    if (k && idMap[k]) post({ type: 'select', ids: [].concat(idMap[k]) });
+  });
+
+  var leftOver = [];
+  function report(results, skipped, leftOut) {
+    leftOver = leftOut || [];
+    idMap = {};
+    var trims = [], lowres = [], pagesHtml = [], sideTrims = 0;
+    results.forEach(function (R) {
+      var pg = R.page, f = R.frame;
+      var note = pg.whitespace > 0.005 ? '<span class="warn">' + Math.round(pg.whitespace * 100) + '% white space (couldn\'t fit flush without cropping)</span>' : '<span class="ok">flush</span>';
+      pagesHtml.push('<li>' + link(f.id, f.label) + ' — ' + pg.rects.length + ' photos, ' + note + '</li>');
+      pg.rects.forEach(function (r, j) {
+        var p = R.photos[j], id = R.ids[j];
+        if (r.crop > 0.01 && r.vertical) trims.push({ id: id, name: p.name, v: r.crop, page: f.label });
+        else if (r.crop > 0.01) sideTrims++;
+        var dpi = p.w / (r.w / f.ppi);
+        if (dpi < S.minDpi) lowres.push({ id: id, name: p.name, v: dpi, page: f.label });
+      });
+    });
+    var h = '<h3>Pages</h3><ul>' + pagesHtml.join('') + '</ul>';
+    h += section('Top/bottom trimmed more than 1% — check heads', trims.sort(function (a, b) { return b.v - a.v; }), function (t) { return (t.v * 100).toFixed(1) + '%'; });
+    if (sideTrims) h += '<div class="muted" style="margin-top:4px">' + sideTrims + ' other photo' + (sideTrims > 1 ? 's have' : ' has') + ' a sliver (≤ ' + S.maxTrim + '%) trimmed off the left/right edges only — heads aren\'t affected.</div>';
+    h += section('May print soft (below ' + S.minDpi + ' dpi)', lowres.sort(function (a, b) { return a.v - b.v; }), function (t) { return Math.round(t.v) + ' dpi'; });
+    if (leftOver.length) h += '<h3>Left out — didn\'t fit the selected pages (' + leftOver.length + ')</h3>' +
+      '<button id="loadLeft" style="margin:2px 0 6px">Load just these ' + leftOver.length + ' for the next pages</button><ul>' +
+      leftOver.map(function (p) { return '<li>' + esc(p.name) + ' <span class="muted">' + (p.w < p.h ? 'vertical' : 'horizontal') + '</span></li>'; }).join('') + '</ul>';
+    if (skipped.length) h += '<h3>Skipped (' + skipped.length + ')</h3><ul>' + skipped.map(function (p) { return '<li>' + esc(p.name) + ' — <span class="muted">' + esc(p.reason) + '</span></li>'; }).join('') + '</ul>';
+    $('report').innerHTML = h;
+    if ($('loadLeft')) $('loadLeft').onclick = function () {
+      if (busy) return;
+      photos = leftOver.slice(); leftOver = [];
+      $('report').innerHTML = ''; setStatus('Loaded ' + photos.length + ' left-out photos. Select the next empty pages and fill.');
+      refresh();
+    };
+  }
+  function section(title, list, fmt) {
+    if (!list.length) return '<h3>' + title + '</h3><div class="muted">None.</div>';
+    var all = list.map(function (t) { return t.id; });
+    return '<h3>' + title + ' (' + list.length + ') ' + link(all, 'select all') + '</h3><ul>' +
+      list.map(function (t) { return '<li>' + link(t.id, t.name) + ' — ' + fmt(t) + ' <span class="muted">· ' + esc(t.page) + '</span></li>'; }).join('') + '</ul>';
+  }
+
+
+  // ---------- proof check (audit) ----------
+  // Fingerprints: 16×16 brightness pattern (vec) + 64-bit difference hash (dh) + a small thumbnail.
+  var stage = null;
+  function canvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  // fingerprint of the whole image plus two centre crops (85%, 70%) so re-cropped copies still match
+  async function features(bytes) {
+    var bm = await createImageBitmap(new Blob([bytes]));
+    var W = bm.width, H = bm.height;
+    if (!stage) stage = canvas(288, 288);
+    var sx = stage.getContext('2d');
+    var g = new Float32Array(288 * 288);
+    function fp(f) {
+      sx.imageSmoothingQuality = 'high'; sx.fillStyle = '#fff'; sx.fillRect(0, 0, 288, 288);
+      sx.drawImage(bm, W * f, H * f, W * (1 - 2 * f), H * (1 - 2 * f), 0, 0, 288, 288); // squashed square
+      var d = sx.getImageData(0, 0, 288, 288).data;
+      for (var i = 0, j = 0; i < g.length; i++, j += 4) g[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+      function grid(cols, rows) {
+        var out = new Float32Array(cols * rows), bw = 288 / cols, bh = 288 / rows;
+        for (var y = 0; y < 288; y++) { var ro = Math.floor(y / bh) * cols; for (var x = 0; x < 288; x++) out[ro + Math.floor(x / bw)] += g[y * 288 + x]; }
+        return out;
+      }
+      var v = grid(16, 16), m = 0, sd = 0, k;
+      for (k = 0; k < 256; k++) m += v[k]; m /= 256;
+      for (k = 0; k < 256; k++) { v[k] -= m; sd += v[k] * v[k]; }
+      sd = Math.sqrt(sd / 256) + 1e-6; for (k = 0; k < 256; k++) v[k] /= sd;
+      var dg = grid(9, 8), dh = new Uint8Array(64);
+      for (var r = 0; r < 8; r++) for (var c = 0; c < 8; c++) dh[r * 8 + c] = dg[r * 9 + c] < dg[r * 9 + c + 1] ? 1 : 0;
+      return { vec: v, dh: dh };
+    }
+    var fps = [fp(0), fp(0.075), fp(0.15)];
+    var tw = Math.max(1, Math.round(64 * W / H));
+    var tc = canvas(Math.min(tw, 160), 64); var tx = tc.getContext('2d'); tx.imageSmoothingQuality = 'high';
+    tx.drawImage(bm, 0, 0, tc.width, 64);
+    var thumb = tc.toDataURL('image/jpeg', 0.75);
+    if (bm.close) bm.close();
+    return { W: W, H: H, vec: fps[0].vec, dh: fps[0].dh, fps: fps, thumb: thumb };
+  }
+  // best match over full-vs-full and centre-crop-vs-full (either way round)
+  var COMBOS = [[0, 0], [1, 0], [0, 1], [2, 0], [0, 2]];
+  function match(A, B) {
+    var best = null;
+    for (var i = 0; i < COMBOS.length; i++) {
+      var a = A.fps[COMBOS[i][0]], b = B.fps[COMBOS[i][1]], c = corr(a.vec, b.vec);
+      if (!best || c > best.c) best = { c: c, a: a, b: b, crop: i > 0 };
+      if (i === 0 && c < 0.4) break; // clearly different pictures — skip the crop comparisons
+    }
+    best.h = ham(best.a.dh, best.b.dh);
+    return best;
+  }
+  function corr(a, b) { var s = 0; for (var i = 0; i < 256; i++) s += a[i] * b[i]; return s / 256; }
+  function ham(a, b) { var s = 0; for (var i = 0; i < 64; i++) s += a[i] !== b[i]; return s; }
+  function cmpOrd(a, b) { for (var i = 0; i < 5; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; }
+
+  async function runAudit(scope) {
+    if (busy) return;
+    busy = true; refresh(); $('report').innerHTML = '';
+    var st = function (h) { $('auditStatus').innerHTML = h; };
+    try {
+      st('Scanning layers…');
+      var listP = waitFor('auditList');
+      post({ type: 'auditScan', scope: scope });
+      var L = await listP, items = L.items;
+      if (!items.length) { st('<span class="warn">No photos found' + (scope === 'selection' ? ' in the selection.' : '.') + '</span>'); busy = false; refresh(); return; }
+      var hashes = [], seen = {};
+      items.forEach(function (it) { if (!seen[it.hash]) { seen[it.hash] = 1; hashes.push(it.hash); } });
+      var F = {}, failed = 0;
+      for (var i = 0; i < hashes.length; i += 6) {
+        st('Reading photos… ' + Math.min(i + 6, hashes.length) + ' / ' + hashes.length); bar('auditBar', i / hashes.length);
+        var bp = waitFor('auditBytes');
+        post({ type: 'auditBytes', hashes: hashes.slice(i, i + 6) });
+        var res = await bp;
+        for (var j = 0; j < res.list.length; j++) {
+          var x = res.list[j];
+          try { if (!x.bytes) throw 0; F[x.hash] = await features(x.bytes); } catch (e) { failed++; }
+        }
+      }
+      bar('auditBar', null); st('Comparing…'); await tick();
+      await auditReport(items, F, L, failed);
+      st('<span class="ok">Checked ' + items.length + ' photo layer' + (items.length > 1 ? 's' : '') + ' (' + hashes.length + ' different images).</span>' +
+        (L.small ? ' <span class="muted">' + L.small + ' tiny image' + (L.small > 1 ? 's' : '') + ' (icons/logos under 40px) ignored.</span>' : '') +
+        (failed ? ' <span class="warn">' + failed + ' image' + (failed > 1 ? 's' : '') + ' couldn\'t be read.</span>' : ''));
+    } catch (e) { bar('auditBar', null); st('<span class="err">' + esc(e.message || e) + '</span>'); }
+    busy = false; refresh();
+  }
+  $('auditAll').onclick = function () { runAudit('file'); };
+  $('auditSel').onclick = function () { runAudit('selection'); };
+
+  function where(it, multi) { return it.label + (multi ? ' · ' + it.page : ''); }
+
+  async function auditReport(items, F, L, failed) {
+    idMap = {};
+    var multi = L.pages > 1;
+    items.sort(function (a, b) { return cmpOrd(a.ord, b.ord); });
+    var H = [], byHash = {};
+    items.forEach(function (it) { if (F[it.hash]) { if (!byHash[it.hash]) { byHash[it.hash] = []; H.push(it.hash); } byHash[it.hash].push(it); } });
+    var n = H.length, parent = H.map(function (_, i) { return i; });
+    function find(a) { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; }
+    var simPairs = [];
+    for (var a = 0; a < n; a++) {
+      if (a % 40 === 0) { $('auditStatus').innerHTML = 'Comparing… ' + Math.round(100 * (1 - (n - a) * (n - a) / (n * n))) + '%'; await tick(); }
+      var A = F[H[a]], ra = A.W / A.H;
+      for (var b = a + 1; b < n; b++) {
+        var B = F[H[b]], ar = Math.abs(Math.log(ra * B.H / B.W));
+        if (ar > 0.25) continue;
+        var mm = match(A, B), c = mm.c, hd = mm.h;
+        if (c < 0.72) continue;
+        if (c >= 0.94 && hd <= 10 && (ar < 0.04 || mm.crop)) parent[find(a)] = find(b);   // same photo: re-upload / re-export / resize / re-crop
+        else if ((c >= 0.80 && hd <= 14) || hd <= 10) simPairs.push([a, b]);          // look-alike: burst, same pose
+      }
+    }
+    // duplicate groups: same image file, or same photo under different files
+    var G = {};
+    for (var i = 0; i < n; i++) { var r = find(i); (G[r] = G[r] || []).push(i); }
+    var dupGroups = [], repeated = [];
+    Object.keys(G).forEach(function (r) {
+      var hs = G[r], pl = [];
+      hs.forEach(function (k) { pl = pl.concat(byHash[H[k]]); });
+      if (pl.length < 2) return;
+      pl.sort(function (x, y) { return cmpOrd(x.ord, y.ord); });
+      var g = { hs: hs, pl: pl, files: hs.length };
+      if (hs.length === 1 && pl.length >= 4) repeated.push(g); else dupGroups.push(g);
+    });
+    dupGroups.sort(function (x, y) { return cmpOrd(x.pl[0].ord, y.pl[0].ord); });
+    // look-alike groups (between different duplicate groups)
+    var p2 = {}; function f2(a) { while (p2[a] !== undefined && p2[a] !== a) a = p2[a]; return a; }
+    simPairs.forEach(function (pr) { var x = f2(find(pr[0])), y = f2(find(pr[1])); if (x !== y) { p2[x] = y; if (p2[y] === undefined) p2[y] = y; } });
+    var SG = {};
+    Object.keys(G).forEach(function (r) { r = +r; if (p2[r] === undefined) return; var t = f2(r); (SG[t] = SG[t] || []).push(r); });
+    var simGroups = Object.keys(SG).map(function (t) {
+      var pl = [], hs = [];
+      SG[t].forEach(function (r) { G[r].forEach(function (k) { hs.push(k); pl = pl.concat(byHash[H[k]]); }); });
+      pl.sort(function (x, y) { return cmpOrd(x.ord, y.ord); });
+      return { hs: hs, pl: pl };
+    }).filter(function (g) { return g.hs.length > 1; }).sort(function (x, y) { return cmpOrd(x.pl[0].ord, y.pl[0].ord); });
+
+    // print checks per placement
+    var lowres = [], crops = [];
+    items.forEach(function (it) {
+      var f = F[it.hash]; if (!f || it.loose) return;
+      var W = f.W, Hh = f.H, dpi = null, trimW = 0, trimH = 0;
+      if (it.mode === 'FILL' || it.mode === 'FIT') {
+        var s = it.mode === 'FILL' ? Math.max(it.w / W, it.h / Hh) : Math.min(it.w / W, it.h / Hh);
+        dpi = it.ppi / s;
+        if (it.mode === 'FILL') { var ia = W / Hh, na = it.w / it.h; if (ia > na) trimW = 1 - na / ia; else trimH = 1 - ia / na; }
+      } else if (it.mode === 'CROP' && it.t) {
+        var sa = Math.abs(it.t[0][0]) || 1, sd = Math.abs(it.t[1][1]) || 1;
+        dpi = it.ppi * sa * W / it.w; trimW = 1 - sa; trimH = 1 - sd;
+      }
+      if (dpi && dpi < S.minDpi) lowres.push({ id: it.id, name: it.name, v: dpi, page: where(it, multi) });
+      var tr = Math.max(trimW, trimH);
+      if (tr > S.maxTrim / 100 + 0.002) crops.push({ id: it.id, name: it.name, v: tr, side: trimH > trimW ? 'top/bottom' : 'sides', page: where(it, multi) });
+    });
+
+    function thumbs(g) { return '<div class="thumbs">' + g.hs.map(function (k) { return '<img src="' + F[H[k]].thumb + '">'; }).join('') + '</div>'; }
+    function places(g) {
+      return '<ul>' + g.pl.map(function (it) { return '<li>' + link(it.id, where(it, multi)) + ' <span class="muted">' + esc(it.name) + '</span></li>'; }).join('') + '</ul>';
+    }
+    var h = '';
+    h += '<h3>Duplicates (' + dupGroups.length + ')</h3>';
+    if (!dupGroups.length) h += '<div class="ok">No photo appears twice.</div>';
+    dupGroups.forEach(function (g) {
+      var samePage = g.pl.every(function (it) { return it.label === g.pl[0].label; });
+      h += '<div class="grp">' + thumbs(g) + '<b>' + g.pl.length + '×</b>' +
+        (g.files > 1 ? '<span class="tag">same photo (different file / crop / burst)</span>' : '<span class="tag">same file</span>') +
+        (samePage ? '<span class="tag">same page</span>' : '') + places(g) + '</div>';
+    });
+    h += '<h3>Look-alikes — check these (' + simGroups.length + ')</h3>';
+    if (!simGroups.length) h += '<div class="muted">None.</div>';
+    else h += '<div class="muted">Very similar shots (bursts, same pose, re-crops). Often fine — keep if they\'re different moments.</div>';
+    simGroups.forEach(function (g) { h += '<div class="grp">' + thumbs(g) + places(g) + '</div>'; });
+    var emp = L.empty.sort(function (a, b) { return cmpOrd(a.ord, b.ord); });
+    h += '<h3>Empty photo frames (' + emp.length + ')</h3>' + (emp.length ? '<ul>' + emp.map(function (e) { return '<li>' + link(e.id, e.label + (multi ? ' · ' + e.page : '')) + '</li>'; }).join('') + '</ul>' : '<div class="muted">None.</div>');
+    h += section('May print soft (below ' + S.minDpi + ' dpi)', lowres.sort(function (a, b) { return a.v - b.v; }), function (t) { return Math.round(t.v) + ' dpi'; });
+    h += section('Cropped more than ' + S.maxTrim + '%', crops.sort(function (a, b) { return b.v - a.v; }), function (t) { return Math.round(t.v * 100) + '% off ' + t.side; });
+    if (repeated.length) {
+      h += '<details class="sub"><summary>Images used 4+ times (' + repeated.length + ') — probably logos or backgrounds</summary>';
+      repeated.forEach(function (g) { h += '<div class="grp">' + thumbs(g) + '<b>' + g.pl.length + '×</b>' + places(g) + '</div>'; });
+      h += '</details>';
+    }
+    $('report').innerHTML = h;
+  }
+
+  // ---------- re-flow ----------
+  $('reflowOrder').onclick = function () { if (!busy) { busy = true; refresh(); setStatus('Reading frames…'); post({ type: 'reflowRead', mode: 'order' }); } };
+  $('reflowBest').onclick = function () { if (!busy) { busy = true; refresh(); setStatus('Reading frames…'); post({ type: 'reflowRead', mode: 'best' }); } };
+
+  async function doReflow(msg) {
+    var results = [];
+    try {
+      var list = msg.frames.filter(function (x) { return x.items.length; });
+      for (var k = 0; k < list.length; k++) {
+        var F = list[k], A = F.items.map(function (it) { return it.iw / it.ih; });
+        setStatus('Re-flowing ' + esc(F.frame.label) + '…'); await tick();
+        var pg = msg.mode === 'order' ? RL.layoutOrdered(A, F.frame.w, F.frame.h, opts()) : RL.layoutFree(A, F.frame.w, F.frame.h, opts());
+        var items = pg.rects.map(function (r) { var it = F.items[r.i]; return { id: it.id, x: r.x, y: r.y, w: r.w, h: r.h }; });
+        var wait = waitFor('reflowed:' + F.frame.id);
+        post({ type: 'reflowApply', frameId: F.frame.id, items: items });
+        await wait;
+        results.push({ frame: F.frame, page: pg, ids: items.map(function (x) { return x.id; }),
+          photos: pg.rects.map(function (r) { var it = F.items[r.i]; return { name: it.name, w: it.iw, h: it.ih }; }) });
+      }
+      setStatus(results.length ? '<span class="ok">Re-flowed ' + results.length + ' frame' + (results.length > 1 ? 's' : '') + '.</span>' : '<span class="warn">No photos found in the selected frames.</span>');
+      if (results.length) report(results, []);
+    } catch (e) { setStatus('<span class="err">' + esc(e.message || e) + '</span>'); }
+    busy = false; refresh();
+  }
+
+  // ---------- messages from Figma ----------
+  window.onmessage = function (ev) {
+    var m = ev.data && ev.data.pluginMessage; if (!m) return;
+    if (m.type === 'selection') { frames = m.frames; invalidSel = m.invalid; refresh(); }
+    else if (m.type === 'settings') { for (var k in m.settings) S[k] = m.settings[k]; showSettings(); refresh(); }
+    else if (m.type === 'placed' && pending['placed:' + m.frameId]) { pending['placed:' + m.frameId].res(m); delete pending['placed:' + m.frameId]; }
+    else if (m.type === 'reflowed' && pending['reflowed:' + m.frameId]) { pending['reflowed:' + m.frameId].res(m); delete pending['reflowed:' + m.frameId]; }
+    else if (m.type === 'reflowData') doReflow(m);
+    else if (m.type === 'auditList' && pending.auditList) { pending.auditList.res(m); delete pending.auditList; }
+    else if (m.type === 'auditBytesRes' && pending.auditBytes) { pending.auditBytes.res(m); delete pending.auditBytes; }
+    else if (m.type === 'auditProgress') { $('auditStatus').innerHTML = esc(m.text); }
+    else if (m.type === 'placedCheck' && pending.placedCheck) { pending.placedCheck.res(m); delete pending.placedCheck; }
+    else if (m.type === 'error') {
+      var key = Object.keys(pending)[0];
+      if (key) { pending[key].rej(new Error(m.text)); delete pending[key]; }
+      else { busy = false; setStatus('<span class="err">' + esc(m.text) + '</span>'); refresh(); }
+    }
+  };
+
+  showSettings(); refresh();
+  post({ type: 'init' });
+})();
+</script>
+</body>
+</html>

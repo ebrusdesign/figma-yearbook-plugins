@@ -1,0 +1,71 @@
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 12px/1.45 Inter, -apple-system, system-ui, sans-serif; margin: 0; padding: 14px;
+         color: var(--figma-color-text, #222); background: var(--figma-color-bg, #fff); }
+  h2 { font-size: 13px; margin: 0 0 10px; }
+  label { display: flex; gap: 8px; align-items: flex-start; margin: 5px 0; cursor: pointer; }
+  .muted { color: var(--figma-color-text-secondary, #777); }
+  .box { border: 1px solid var(--figma-color-border, #e5e5e5); border-radius: 6px; padding: 8px 10px; margin: 10px 0; }
+  button { width: 100%; padding: 9px; border-radius: 6px; border: 0; font: inherit; font-weight: 600; cursor: pointer;
+           background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); }
+  button:disabled { opacity: .4; cursor: default; }
+  #list { max-height: 150px; overflow: auto; margin-top: 6px; }
+  #list a { display: block; padding: 2px 0; color: var(--figma-color-text-brand, #0d99ff); cursor: pointer; text-decoration: none; }
+  #list a:hover { text-decoration: underline; }
+  .ok { color: var(--figma-color-text-success, #14ae5c); }
+  .err { color: var(--figma-color-text-danger, #f24822); }
+</style>
+<h2>Reset photo exposure</h2>
+<div class="muted">Sets Exposure back to 0. The image, crop, size and position aren't touched.</div>
+
+<div class="box">
+  <label><input type="radio" name="scope" value="selection" checked><span>Selected layers / frames <span class="muted" id="selCount"></span></span></label>
+  <label><input type="radio" name="scope" value="page"><span>This Figma page</span></label>
+  <label><input type="radio" name="scope" value="all"><span>Every page in the file</span></label>
+</div>
+<label><input type="checkbox" id="all"><span>Also reset contrast, saturation, temperature, tint, highlights and shadows <span class="muted">(off = exposure only)</span></span></label>
+
+<div class="box" id="result"><span class="muted">Scanning…</span></div>
+<button id="go" disabled>Reset</button>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var selCount = 0, last = null;
+  function scope() { return document.querySelector('input[name=scope]:checked').value; }
+  function post(m) { parent.postMessage({ pluginMessage: m }, '*'); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function scan() {
+    if (scope() === 'selection' && !selCount) { $('result').innerHTML = '<span class="muted">Select some photos, frames or book pages first.</span>'; $('go').disabled = true; return; }
+    $('result').innerHTML = '<span class="muted">Scanning…</span>'; $('go').disabled = true;
+    post({ type: 'scan', scope: scope(), all: $('all').checked });
+  }
+  document.querySelectorAll('input').forEach(function (i) { i.onchange = scan; });
+  $('go').onclick = function () { $('go').disabled = true; $('result').innerHTML = '<span class="muted">Resetting…</span>'; post({ type: 'reset', scope: scope(), all: $('all').checked }); };
+
+  onmessage = function (e) {
+    var m = e.data.pluginMessage; if (!m) return;
+    if (m.type === 'sel') { selCount = m.count; $('selCount').textContent = '(' + m.count + ')'; if (scope() === 'selection') scan(); }
+    else if (m.type === 'scan') {
+      last = m;
+      var h = '<b>' + m.total + '</b> photo' + (m.total === 1 ? '' : 's') + ' found. ';
+      if (!m.need) h += '<span class="ok">' + (m.total ? 'All already at default.' : '') + '</span>';
+      else h += '<b>' + m.need + '</b> to reset' + ':';
+      if (!$('all').checked && m.other) h += '<div class="muted" style="margin-top:4px">' + m.other + ' also have other adjustments (contrast etc.) — left alone unless you tick the box above.</div>';
+      if (m.groups.length) h += '<div id="list">' + m.groups.map(function (g, i) {
+        return '<a data-i="' + i + '">' + esc(g.name) + (m.multiPage ? ' · ' + esc(g.page) : '') + ' <span class="muted">(' + g.ids.length + ')</span></a>';
+      }).join('') + '</div><div class="muted" style="margin-top:4px">Click a name to select those photos.</div>';
+      $('result').innerHTML = h;
+      $('result').querySelectorAll('a').forEach(function (a) { a.onclick = function () { post({ type: 'select', ids: last.groups[+a.dataset.i].ids }); }; });
+      $('go').disabled = !m.need;
+      $('go').textContent = m.need ? 'Reset ' + m.need + ' photo' + (m.need === 1 ? '' : 's') : 'Reset';
+    }
+    else if (m.type === 'done') {
+      setTimeout(function () {
+        var d = '<div class="ok" style="margin-top:6px">Done — reset ' + m.fixed + '. Cmd+Z undoes it.</div>';
+        if (m.failed.length) d += '<div class="err">Couldn\'t change ' + m.failed.length + ' (probably inside a library component): ' + esc(m.failed.slice(0, 5).join(', ')) + '</div>';
+        $('result').insertAdjacentHTML('beforeend', d);
+      }, 50);
+    }
+    else if (m.type === 'error') { $('result').innerHTML = '<span class="err">' + esc(m.message) + '</span>'; }
+  };
+</script>

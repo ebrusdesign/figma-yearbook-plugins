@@ -1,0 +1,17 @@
+{
+  "name": "Yearbook Photo Fill",
+  "id": "1438291175500000026",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": [
+    "figma"
+  ],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://cdn.jsdelivr.net"
+    ],
+    "reasoning": "Loads an HEIC (iPhone photo) converter only when an HEIC file is chosen."
+  }
+}

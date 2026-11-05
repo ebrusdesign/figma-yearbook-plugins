@@ -1,0 +1,154 @@
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 12px/1.45 Inter, -apple-system, system-ui, sans-serif; margin: 0; padding: 12px 14px 70px;
+         color: var(--figma-color-text, #222); background: var(--figma-color-bg, #fff); }
+  h2 { font-size: 13px; margin: 0 0 8px; }
+  .muted { color: var(--figma-color-text-secondary, #777); }
+  .box { border: 1px solid var(--figma-color-border, #e5e5e5); border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  input[type=text], input[type=number], select { font: inherit; padding: 4px 6px; border-radius: 4px; min-width: 0;
+         border: 1px solid var(--figma-color-border, #ddd); background: var(--figma-color-bg, #fff); color: inherit; }
+  input[type=number] { width: 70px; }
+  .seg { display: inline-flex; border: 1px solid var(--figma-color-border, #ddd); border-radius: 5px; overflow: hidden; }
+  .seg button { border: 0; background: none; padding: 4px 12px; font: inherit; color: inherit; cursor: pointer; }
+  .seg button.on { background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); }
+  .fld { display: grid; grid-template-columns: 90px 1fr; gap: 6px; align-items: center; margin: 4px 0; }
+  .fld label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--figma-color-border, #eee); white-space: nowrap; }
+  th { font-weight: 600; color: var(--figma-color-text-secondary, #777); }
+  td a { color: var(--figma-color-text-brand, #0d99ff); cursor: pointer; }
+  .chg { font-weight: 600; }
+  .warn { color: var(--figma-color-text-warning, #b86200); }
+  .err { color: var(--figma-color-text-danger, #f24822); }
+  .ok { color: var(--figma-color-text-success, #14ae5c); }
+  #tblWrap { max-height: 190px; overflow: auto; }
+  .foot { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 14px; background: var(--figma-color-bg, #fff);
+          border-top: 1px solid var(--figma-color-border, #eee); }
+  #go { width: 100%; padding: 9px; border-radius: 6px; border: 0; font: inherit; font-weight: 600; cursor: pointer;
+        background: var(--figma-color-bg-brand, #0d99ff); color: var(--figma-color-text-onbrand, #fff); }
+  #go:disabled { opacity: .4; cursor: default; }
+  details summary { cursor: pointer; }
+</style>
+
+<h2>Headers &amp; footers</h2>
+<div class="row">
+  <div class="seg" id="scope"><button data-v="selection" class="on">Selected pages</button><button data-v="page">Whole Figma page</button></div>
+</div>
+
+<div class="box">
+  <div class="head"><input type="checkbox" id="doSides" checked> Left / Right</div>
+  <div class="row">Start with <div class="seg" id="start"><button data-v="Left" class="on">Left</button><button data-v="Right">Right</button></div> <span class="muted">then alternate</span></div>
+</div>
+
+<div class="box">
+  <div class="head"><input type="checkbox" id="doNums" checked> Page numbers</div>
+  <div class="row">First page is <input type="number" id="startNum" value="1"> <span class="muted">then +1 per page</span></div>
+  <label class="row" style="cursor:pointer"><input type="checkbox" id="doRename" checked> Also rename the frames to their page number</label>
+</div>
+
+<div class="box">
+  <div class="head"><input type="checkbox" id="doText"> Header text</div>
+  <div id="fields" class="muted">No headers found yet.</div>
+  <div class="muted" style="margin-top:4px">Leave a box empty to keep what's there.</div>
+</div>
+
+<div class="box">
+  <div class="head">Preview <span class="muted" id="count"></span></div>
+  <div id="tblWrap"><div class="muted">Select the book pages for a section.</div></div>
+  <div id="warn"></div>
+</div>
+
+<details class="box"><summary class="muted">Components used</summary>
+  <div class="fld"><label>Header</label><select id="hName"></select></div>
+  <div class="fld"><label>Footer</label><select id="fName"></select></div>
+</details>
+
+<div id="report"></div>
+<div class="foot"><button id="go" disabled>Apply</button></div>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var S = { scope: 'selection', start: 'Left', data: null, texts: {} };
+  function post(m) { parent.postMessage({ pluginMessage: m }, '*'); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function seg(id, key, cb) {
+    $(id).querySelectorAll('button').forEach(function (b) {
+      b.onclick = function () {
+        $(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+        S[key] = b.dataset.v; cb && cb();
+      };
+    });
+  }
+  function scan() { post({ type: 'scan', scope: S.scope, headerName: $('hName').value, footerName: $('fName').value }); }
+  seg('scope', 'scope', scan);
+  seg('start', 'start', render);
+  ['doSides', 'doNums', 'doRename', 'doText', 'startNum'].forEach(function (id) { $(id).oninput = render; $(id).onchange = render; });
+  $('hName').onchange = scan; $('fName').onchange = scan;
+
+  function side(i) { return (i % 2 === 0) === (S.start === 'Left') ? 'Left' : 'Right'; }
+  function startNum() { var v = parseInt($('startNum').value, 10); return isNaN(v) ? null : v; }
+
+  function renderFields(fields) {
+    if (!fields.length) { $('fields').innerHTML = '<span class="muted">No headers found yet.</span>'; return; }
+    var nice = fields.length === 2 ? ['Title', 'Subtitle'] : null;
+    $('fields').innerHTML = fields.map(function (f, i) {
+      return '<div class="fld"><label title="Layer: ' + esc(f.key) + '">' + esc(nice ? nice[i] : f.key) + '</label><input type="text" data-k="' + esc(f.key) + '" placeholder="' + esc(f.sample) + '" value="' + esc(S.texts[f.key] || '') + '"></div>';
+    }).join('');
+    $('fields').querySelectorAll('input').forEach(function (inp) {
+      inp.oninput = function () { S.texts[inp.dataset.k] = inp.value; if (inp.value) $('doText').checked = true; render(); };
+    });
+  }
+
+  function render() {
+    var d = S.data; if (!d) return;
+    var ps = d.pages, n0 = startNum();
+    $('count').textContent = ps.length ? '(' + ps.length + ' page' + (ps.length === 1 ? '' : 's') + ', top-left to bottom-right)' : '';
+    if (!ps.length) {
+      $('tblWrap').innerHTML = '<div class="muted">' + (S.scope === 'selection' && !d.selCount ? 'Select the book pages for a section (or the section).' : 'No pages with a ' + esc(d.headerName || 'header') + ' or ' + esc(d.footerName || 'footer') + ' found.') + '</div>';
+    } else {
+      var h = '<table><tr><th>#</th><th>Frame</th><th>Side</th><th>Number</th></tr>';
+      ps.forEach(function (p, i) {
+        var now = p.hSide || p.fSide || '?', s = $('doSides').checked ? side(i) : now;
+        var num = $('doNums').checked && n0 !== null ? String(n0 + i) : (p.num || '—');
+        var nn = $('doRename').checked && n0 !== null ? String(n0 + i) : p.name;
+        h += '<tr><td>' + (i + 1) + '</td><td><a data-id="' + p.id + '">' + esc(p.name) + '</a>' + (nn !== p.name ? ' → <span class="chg">' + esc(nn) + '</span>' : '') + '</td>' +
+             '<td' + (s.toLowerCase() !== now.toLowerCase() ? ' class="chg"' : '') + '>' + esc(s) + '</td>' +
+             '<td' + (num !== p.num ? ' class="chg"' : '') + '>' + esc(num) + (p.nf ? '' : ' <span class="warn">no footer</span>') + '</td></tr>';
+      });
+      $('tblWrap').innerHTML = h + '</table>';
+      $('tblWrap').querySelectorAll('a').forEach(function (a) { a.onclick = function () { post({ type: 'goto', id: a.dataset.id }); }; });
+    }
+    var w = [];
+    var noHead = ps.filter(function (p) { return !p.nh; }).length, noNum = ps.filter(function (p) { return p.nf && !p.numLayer; }).length;
+    var mixed = ps.filter(function (p) { return p.hSide && p.fSide && p.hSide.toLowerCase() !== p.fSide.toLowerCase(); }).length;
+    if (noHead) w.push(noHead + ' page(s) have no header.');
+    if (noNum) w.push(noNum + ' footer(s) have no number layer I can find.');
+    if (mixed && !$('doSides').checked) w.push(mixed + ' page(s) have header and footer on different sides.');
+    $('warn').innerHTML = w.map(function (x) { return '<div class="warn">' + esc(x) + '</div>'; }).join('');
+    var any = $('doSides').checked || (($('doNums').checked || $('doRename').checked) && n0 !== null) || ($('doText').checked && Object.keys(S.texts).some(function (k) { return S.texts[k]; }));
+    $('go').disabled = !ps.length || !any;
+  }
+
+  $('go').onclick = function () {
+    $('go').disabled = true; $('report').innerHTML = '<div class="box muted">Updating…</div>';
+    post({ type: 'apply', scope: S.scope, headerName: S.data.headerName, footerName: S.data.footerName,
+           doSides: $('doSides').checked, start: S.start,
+           doNums: $('doNums').checked && startNum() !== null, doRename: $('doRename').checked && startNum() !== null, startNum: startNum(),
+           doText: $('doText').checked, texts: S.texts, fieldOrder: S.data.fields.map(function (f) { return f.key; }) });
+  };
+
+  onmessage = function (e) {
+    var m = e.data.pluginMessage; if (!m) return;
+    if (m.type === 'scan') {
+      var fill = function (sel, val) { $(sel).innerHTML = m.names.map(function (n) { return '<option' + (n === val ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') || '<option></option>'; };
+      fill('hName', m.headerName); fill('fName', m.footerName);
+      S.data = m; renderFields(m.fields); render();
+    } else if (m.type === 'done') {
+      var r = m.res, h = '<div class="box"><div class="ok">Done — flipped ' + r.flipped + ', numbered ' + r.numbered + ', header text on ' + r.texted + ', renamed ' + r.renamed + ' frames. Cmd+Z undoes it.</div>';
+      if (r.problems.length) h += '<div class="err" style="margin-top:4px">' + r.problems.length + ' problem(s):</div>' + r.problems.map(function (p) { return '<div class="err">' + esc(p.page) + ': ' + esc(p.what) + '</div>'; }).join('');
+      $('report').innerHTML = h + '</div>';
+    } else if (m.type === 'error') { $('report').innerHTML = '<div class="box err">' + esc(m.message) + '</div>'; }
+  };
+</script>
